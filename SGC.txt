@@ -1,9 +1,8 @@
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local parryKey = Enum.KeyCode.F
 
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "ParryToggleGui"
@@ -37,26 +36,66 @@ toggleButton.MouseButton1Click:Connect(function()
     toggleButton.BackgroundColor3 = parryEnabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(0, 170, 255)
 end)
 
+local dragging, dragStart, startPos
+toggleButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = toggleButton.Position
+    end
+end)
+
+toggleButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if dragging then
+        local delta = UserInputService:GetMouseLocation() - dragStart
+        toggleButton.Position = UDim2.new(0, startPos.X.Offset + delta.X, 0, startPos.Y.Offset + delta.Y)
+    end
+end)
+
 local function pressParry()
-    VirtualInputManager:SendKeyEvent(true, parryKey, false, game)
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
     task.wait(0.05)
-    VirtualInputManager:SendKeyEvent(false, parryKey, false, game)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
 end
 
-local function getCircularObject()
-    for _, obj in pairs(workspace:GetChildren()) do
-        if obj:IsA("BasePart") and obj.Shape == Enum.PartType.Ball then
-            return obj
+local function isCircularObjectAndMovable(obj)
+    if obj:IsA("BasePart") and obj.Shape == Enum.PartType.Ball and obj.Velocity.Magnitude > 0 then
+        return true
+    end
+    if (obj:IsA("MeshPart") or obj:IsA("UnionOperation")) then
+        local size = obj.Size
+        if math.abs(size.X - size.Y) < 0.1 and math.abs(size.Y - size.Z) < 0.1 and obj.Velocity.Magnitude > 0 then
+            return true
         end
     end
-    return nil
+    return false
+end
+
+local function getClosestMovingCircularObject()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local closest, minDist = nil, math.huge
+    for _, obj in pairs(workspace:GetChildren()) do
+        if isCircularObjectAndMovable(obj) then
+            local dist = (hrp.Position - obj.Position).Magnitude
+            if dist < minDist then
+                closest = obj
+                minDist = dist
+            end
+        end
+    end
+    return closest
 end
 
 local function getAdjustedParryTime(speed)
-    local minTime = 0.15
-    local maxTime = 0.25
-    local minSpeed = 50
-    local maxSpeed = 150
+    local minTime, maxTime = 0.15, 0.25
+    local minSpeed, maxSpeed = 50, 150
     local ratio = math.clamp((speed - minSpeed) / (maxSpeed - minSpeed), 0, 1)
     return maxTime - ((maxTime - minTime) * ratio)
 end
@@ -65,12 +104,29 @@ local maxParryDistance = 10
 local spamCooldown = 0.1
 local lastParry = 0
 
+UserInputService.TouchStarted:Connect(function(touch, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    if parryEnabled and tick() - lastParry >= spamCooldown then
+        pressParry()
+        lastParry = tick()
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.F then
+        if parryEnabled and tick() - lastParry >= spamCooldown then
+            pressParry()
+            lastParry = tick()
+        end
+    end
+end)
+
 RunService.Heartbeat:Connect(function()
     if not parryEnabled then return end
 
-    character = player.Character or player.CharacterAdded:Wait()
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    local circle = getCircularObject()  -- ค้นหาวัตถุวงกลม
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    local circle = getClosestMovingCircularObject()
 
     if circle and hrp then
         local distance = (hrp.Position - circle.Position).Magnitude
@@ -89,11 +145,9 @@ RunService.Heartbeat:Connect(function()
             end
         elseif approaching then
             local parryTime = getAdjustedParryTime(speed)
-            if timeToHit <= parryTime then
-                if tick() - lastParry >= spamCooldown then
-                    pressParry()
-                    lastParry = tick()
-                end
+            if timeToHit <= parryTime and tick() - lastParry >= spamCooldown then
+                pressParry()
+                lastParry = tick()
             end
         end
     else
