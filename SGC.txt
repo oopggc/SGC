@@ -2,11 +2,18 @@ local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local player = Players.LocalPlayer
+
+-- Ensure mobile controls work
+player.DevTouchMovementMode = Enum.DevTouchMovementMode.Thumbstick
+player.DevComputerMovementMode = Enum.DevComputerMovementMode.UserChoice
 
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "ParryToggleGui"
 screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0, 140, 0, 50)
@@ -16,6 +23,8 @@ toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 toggleButton.TextColor3 = Color3.new(1, 1, 1)
 toggleButton.TextSize = 20
 toggleButton.Text = "SGC Parry: OFF"
+toggleButton.AutoButtonColor = true
+toggleButton.Modal = false
 toggleButton.Parent = screenGui
 
 local speedLabel = Instance.new("TextLabel")
@@ -104,14 +113,16 @@ local maxParryDistance = 10
 local spamCooldown = 0.1
 local lastParry = 0
 
-UserInputService.TouchStarted:Connect(function(touch, gameProcessedEvent)
-    if gameProcessedEvent then return end
+-- TOUCH support (mobile)
+UserInputService.TouchTap:Connect(function(touchPositions, gameProcessedEvent)
+    if gameProcessedEvent or GuiService.MenuIsOpen then return end
     if parryEnabled and tick() - lastParry >= spamCooldown then
         pressParry()
         lastParry = tick()
     end
 end)
 
+-- KEYBOARD support
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
     if gameProcessedEvent then return end
     if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.F then
@@ -122,10 +133,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
     end
 end)
 
+-- Main logic loop
 RunService.Heartbeat:Connect(function()
     if not parryEnabled then return end
 
-    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     local circle = getClosestMovingCircularObject()
 
     if circle and hrp then
