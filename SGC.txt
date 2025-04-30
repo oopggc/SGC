@@ -27,7 +27,7 @@ speedLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 speedLabel.TextColor3 = Color3.new(1, 1, 1)
 speedLabel.TextScaled = true
 speedLabel.Font = Enum.Font.SourceSansBold
-speedLabel.Text = "Ball Speed: N/A"
+speedLabel.Text = "Object Speed: N/A"
 speedLabel.Parent = screenGui
 
 local parryEnabled = false
@@ -43,9 +43,9 @@ local function pressParry()
     VirtualInputManager:SendKeyEvent(false, parryKey, false, game)
 end
 
-local function getBall()
+local function getCircularObject()
     for _, obj in pairs(workspace:GetChildren()) do
-        if obj:IsA("BasePart") and obj.Name:lower() == "ball" then
+        if obj:IsA("BasePart") and obj.Shape == Enum.PartType.Ball then
             return obj
         end
     end
@@ -70,17 +70,17 @@ RunService.Heartbeat:Connect(function()
 
     character = player.Character or player.CharacterAdded:Wait()
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    local ball = getBall()
+    local circle = getCircularObject()  -- ค้นหาวัตถุวงกลม
 
-    if ball and hrp then
-        local distance = (hrp.Position - ball.Position).Magnitude
-        local directionToPlayer = (hrp.Position - ball.Position).Unit
-        local ballVelocity = ball.Velocity
-        local speed = ballVelocity.Magnitude
-        local approaching = ballVelocity:Dot(directionToPlayer) > 0
+    if circle and hrp then
+        local distance = (hrp.Position - circle.Position).Magnitude
+        local directionToPlayer = (hrp.Position - circle.Position).Unit
+        local circleVelocity = circle.Velocity
+        local speed = circleVelocity.Magnitude
+        local approaching = circleVelocity:Dot(directionToPlayer) > 0
         local timeToHit = speed > 0 and (distance / speed) or math.huge
 
-        speedLabel.Text = string.format("Ball Speed: %.1f", speed)
+        speedLabel.Text = string.format("Object Speed: %.1f", speed)
 
         if approaching and speed >= 100 and distance <= maxParryDistance then
             if tick() - lastParry >= spamCooldown then
@@ -97,6 +97,6 @@ RunService.Heartbeat:Connect(function()
             end
         end
     else
-        speedLabel.Text = "Ball Speed: N/A"
+        speedLabel.Text = "Object Speed: N/A"
     end
 end)
