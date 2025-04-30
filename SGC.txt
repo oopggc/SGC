@@ -1,0 +1,102 @@
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local parryKey = Enum.KeyCode.F
+
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "ParryToggleGui"
+screenGui.ResetOnSpawn = false
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 140, 0, 50)
+toggleButton.Position = UDim2.new(1, -160, 1, -70)
+toggleButton.AnchorPoint = Vector2.new(0, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.TextSize = 20
+toggleButton.Text = "SGC Parry: OFF"
+toggleButton.Parent = screenGui
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 200, 0, 40)
+speedLabel.Position = UDim2.new(0, 10, 0, 10)
+speedLabel.BackgroundTransparency = 0.5
+speedLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+speedLabel.TextColor3 = Color3.new(1, 1, 1)
+speedLabel.TextScaled = true
+speedLabel.Font = Enum.Font.SourceSansBold
+speedLabel.Text = "Ball Speed: N/A"
+speedLabel.Parent = screenGui
+
+local parryEnabled = false
+toggleButton.MouseButton1Click:Connect(function()
+    parryEnabled = not parryEnabled
+    toggleButton.Text = parryEnabled and "SGC Parry: ON" or "SGC Parry: OFF"
+    toggleButton.BackgroundColor3 = parryEnabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(0, 170, 255)
+end)
+
+local function pressParry()
+    VirtualInputManager:SendKeyEvent(true, parryKey, false, game)
+    task.wait(0.05)
+    VirtualInputManager:SendKeyEvent(false, parryKey, false, game)
+end
+
+local function getBall()
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("BasePart") and obj.Name:lower() == "ball" then
+            return obj
+        end
+    end
+    return nil
+end
+
+local function getAdjustedParryTime(speed)
+    local minTime = 0.15
+    local maxTime = 0.25
+    local minSpeed = 50
+    local maxSpeed = 150
+    local ratio = math.clamp((speed - minSpeed) / (maxSpeed - minSpeed), 0, 1)
+    return maxTime - ((maxTime - minTime) * ratio)
+end
+
+local maxParryDistance = 10
+local spamCooldown = 0.1
+local lastParry = 0
+
+RunService.Heartbeat:Connect(function()
+    if not parryEnabled then return end
+
+    character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local ball = getBall()
+
+    if ball and hrp then
+        local distance = (hrp.Position - ball.Position).Magnitude
+        local directionToPlayer = (hrp.Position - ball.Position).Unit
+        local ballVelocity = ball.Velocity
+        local speed = ballVelocity.Magnitude
+        local approaching = ballVelocity:Dot(directionToPlayer) > 0
+        local timeToHit = speed > 0 and (distance / speed) or math.huge
+
+        speedLabel.Text = string.format("Ball Speed: %.1f", speed)
+
+        if approaching and speed >= 100 and distance <= maxParryDistance then
+            if tick() - lastParry >= spamCooldown then
+                pressParry()
+                lastParry = tick()
+            end
+        elseif approaching then
+            local parryTime = getAdjustedParryTime(speed)
+            if timeToHit <= parryTime then
+                if tick() - lastParry >= spamCooldown then
+                    pressParry()
+                    lastParry = tick()
+                end
+            end
+        end
+    else
+        speedLabel.Text = "Ball Speed: N/A"
+    end
+end)
